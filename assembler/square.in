@@ -1,0 +1,109 @@
+in
+pop rax
+in
+pop rbx
+in
+pop rcx
+push 0
+push rax
+je solve_linear:
+jmp solve_square:
+stop:
+end
+
+solve_square:
+push 2
+push rbx
+pow
+push -4
+push rax
+push rcx
+mul
+mul
+add
+pop rdx
+push 0
+push rdx
+jb no_roots:
+push 0
+push rdx
+je one_root:
+push 0.5
+push rdx
+pow
+pop rdx
+jmp two_roots:
+jmp stop:
+
+solve_linear:
+push 0
+push rbx
+je check_inf_or_no_roots:
+push rbx
+push -1
+push rcx
+mul
+div
+out
+jmp stop:
+
+check_inf_or_no_roots:
+push 0
+push rcx
+jne no_roots:
+jmp inf_roots:
+jmp stop:
+
+inf_roots:
+push -1
+dup
+dup
+out
+out
+out
+jmp stop:
+
+two_roots:
+push 2
+push rax
+mul
+push rdx
+push -1
+push rbx
+mul
+add
+div
+out
+push 2
+push rax
+mul
+push rdx
+push -1
+push rbx
+mul
+sub
+div
+out
+jmp stop:
+
+one_root:
+push 2
+push rax
+mul
+push -1
+push rbx
+mul
+div
+out
+jmp stop:
+
+no_roots:
+push -2
+dup
+dup
+dup
+out
+out
+out
+out
+jmp stop:

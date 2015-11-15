@@ -11,18 +11,33 @@
 #define SIMPLE_COMMAND 1
 #define COMPLEX_COMMAND 2
 
+#define STR_(x) #x
+#define STR(x) STR_(x)
+#define MAX_LABELNAME 64
+
 #define MY_NAME "GavYur"
 #define VERSION "0.1"
 #define PRINT_VER(program) printf(program " v" VERSION " (%s %s) by " MY_NAME "\n", __DATE__, __TIME__)
 
+typedef struct
+{
+    char* name;
+    int length;
+    int index;
+} Label;
+
 int assemble_code(const char* inputfile, const char* outputfile);
-int count_commands(FILE* stream, int* commands_cnt, int* params_cnt);
+int count_commands(FILE* stream, int* commands_cnt, int* params_cnt, int* labels_cnt);
 int is_command(char* str);
-int fill_commands(FILE* stream, CPU_command_t* commands);
+int fill_commands(FILE* stream, CPU_command_t* commands, Label* labels, int labels_cnt, int warn_label);
 int get_cmd_number(char* str);
+int str_lower(char* str);
 int write_assembled(const char* filename, const CPU_command_t* commands, int commands_cnt, int params_cnt);
 int print_help();
 int print_version();
+int label_ctor(Label* This, const char* str, int index);
+int label_destruct(Label* This);
+int find_index_by_labelname(Label* labels, int labels_cnt, const char* name);
 
 int main(int argc, char* argv[])
 {
@@ -80,6 +95,27 @@ int print_version()
     return 0;
 }
 
+int label_ctor(Label* This, const char* str, int index)
+{
+    assert(This);
+    This->name = strdup(str);
+    if (!This->name)
+        return 1;
+    This->length = strlen(str);
+    This->index = index;
+    return 0;
+}
+
+int label_destruct(Label* This)
+{
+    assert(This);
+    free(This->name);
+    This->name = 0;
+    This->length = -1;
+    This->index = -1;
+    return 0;
+}
+
 int assemble_code(const char* inputfile, const char* outputfile)
 {
     assert(inputfile);
@@ -95,12 +131,16 @@ int assemble_code(const char* inputfile, const char* outputfile)
 
     int commands_cnt = 0;
     int params_cnt = 0;
-    if (count_commands(stream, &commands_cnt, &params_cnt) != 0)
+    int labels_cnt = 0;
+    if (count_commands(stream, &commands_cnt, &params_cnt, &labels_cnt) != 0)
         return 2;
 
+    Label* labels = (Label*) calloc(labels_cnt, sizeof(*labels));
     CPU_command_t* commands = (CPU_command_t*) calloc(commands_cnt, sizeof(*commands));
 
-    if (fill_commands(stream, commands) != 0)
+    if (fill_commands(stream, commands, labels, labels_cnt, 0) != 0)
+        return 3;
+    if (fill_commands(stream, commands, labels, labels_cnt, 1) != 0)
         return 3;
 
     if (write_assembled(outputfile, commands, commands_cnt, params_cnt) != 0)
@@ -114,40 +154,86 @@ int assemble_code(const char* inputfile, const char* outputfile)
 
     fclose(stream);
     free(commands);
+    for (int i = 0; i < labels_cnt; ++i)
+        label_destruct(&labels[i]);
+    free(labels);
 
     return 0;
 }
 
-int count_commands(FILE* stream, int* commands_cnt, int* params_cnt)
+int str_lower(char* str)
 {
-    char wrd[64] = {};
-    while (fscanf(stream, "%64s", wrd) != EOF)
+    for (int i = 0; str[i]; ++i)
+        str[i] = tolower(str[i]);
+    return 0;
+}
+
+int find_index_by_labelname(Label* labels, int labels_cnt, const char* name)
+{
+    for (int i = 0; i < labels_cnt; ++i)
+        if (labels[i].name && !strcmp(labels[i].name, name))
+            return labels[i].index;
+    return -1;
+}
+
+int count_commands(FILE* stream, int* commands_cnt, int* params_cnt, int* labels_cnt)
+{
+    char wrd[MAX_LABELNAME] = {};
+    while (fscanf(stream, "%" STR(MAX_LABELNAME) "s", wrd) != EOF)
     {
+        wrd[MAX_LABELNAME - 1] = '\0';
+        str_lower(wrd);
         int is_cmd = is_command(wrd);
-        if (!is_cmd)
+        if (is_cmd)
+        {
+            float tmp_fl = 0;
+            if (is_cmd == COMPLEX_COMMAND)
+            {
+                if (fscanf(stream, "%f", &tmp_fl) != 1)
+                {
+                    char param[MAX_LABELNAME] = {};
+                    fscanf(stream, "%" STR(MAX_LABELNAME) "s", param);
+                    param[MAX_LABELNAME - 1] = '\0';
+                    str_lower(param);
+                    if (!strcmp(wrd, "push") || !strcmp(wrd, "pop"))
+                    {
+                        if (strcmp(param, "rax") &&
+                            strcmp(param, "rbx") &&
+                            strcmp(param, "rcx") &&
+                            strcmp(param, "rdx"))
+                        {
+                            printf("Incorrect parameter %s found\n", param);
+                            rewind(stream);
+                            return -1;
+                        }
+                    } else if (!strcmp(wrd, "ja") ||
+                               !strcmp(wrd, "jae") ||
+                               !strcmp(wrd, "jb") ||
+                               !strcmp(wrd, "jbe") ||
+                               !strcmp(wrd, "je") ||
+                               !strcmp(wrd, "jne") ||
+                               !strcmp(wrd, "jmp"))
+                    {
+                        if (param[strlen(param) - 1] != ':')
+                        {
+                            printf("Incorrect parameter %s found\n", param);
+                            rewind(stream);
+                            return -1;
+                        }
+                    }
+                }
+                ++(*params_cnt);
+            }
+            ++(*commands_cnt);
+        } else if (wrd[strlen(wrd) - 1] == ':')
+        {
+            ++(*labels_cnt);
+        } else
         {
             printf("Incorrect command %s found\n", wrd);
             rewind(stream);
             return -1;
         }
-        int tmp_num = 0;
-        if (is_cmd == COMPLEX_COMMAND)
-        {
-            if (fscanf(stream, "%d", &tmp_num) == 1)
-            {
-                ++(*params_cnt);
-            } else
-            {
-                fscanf(stream, "%32s", wrd);
-                if (strcmp(wrd, "rax") != 0)
-                {
-                    printf("Incorrect command %s found\n", wrd);
-                    rewind(stream);
-                    return -1;
-                }
-            }
-        }
-        ++(*commands_cnt);
     }
     rewind(stream);
     return 0;
@@ -158,71 +244,140 @@ int is_command(char* str)
     if (!strcmp(str, "push") ||
         !strcmp(str, "pop") ||
         !strcmp(str, "ja") ||
-        !strcmp(str, "jmp"))
+        !strcmp(str, "jae") ||
+        !strcmp(str, "jb") ||
+        !strcmp(str, "jbe") ||
+        !strcmp(str, "je") ||
+        !strcmp(str, "jne") ||
+        !strcmp(str, "jmp") ||
+        !strcmp(str, "call"))
         return COMPLEX_COMMAND;
     if (!strcmp(str, "add") ||
         !strcmp(str, "sub") ||
         !strcmp(str, "mul") ||
         !strcmp(str, "div") ||
         !strcmp(str, "pow") ||
+        !strcmp(str, "dup") ||
         !strcmp(str, "out") ||
+        !strcmp(str, "nop") ||
+        !strcmp(str, "in") ||
+        !strcmp(str, "ret") ||
         !strcmp(str, "end"))
         return SIMPLE_COMMAND;
     return NOT_COMMAND;
 }
 
-int fill_commands(FILE* stream, CPU_command_t* commands)
+int fill_commands(FILE* stream, CPU_command_t* commands, Label* labels, int labels_cnt, int warn_label)
 {
     int cmd_index = 0;
-    char wrd[64] = {};
-    while (fscanf(stream, "%64s", wrd) != EOF)
+    int lbl_index = 0;
+    int lenwrd = 0;
+    char wrd[MAX_LABELNAME] = {};
+    while (fscanf(stream, "%" STR(MAX_LABELNAME) "s", wrd) != EOF)
     {
-        int cmd = get_cmd_number(wrd);
-        CPU_command_t command = {};
-        CPU_command_ctor(&command, cmd, 0);
-        int param = 0;
-        switch (cmd)
+        wrd[MAX_LABELNAME - 1] = '\0';
+        lenwrd = strlen(wrd);
+        if (wrd[lenwrd - 1] == ':')
         {
-        case PUSH:
-            if (fscanf(stream, "%d", &param) == 1)
+            wrd[lenwrd - 1] = '\0';
+            Label label = {};
+            label_ctor(&label, wrd, cmd_index);
+            labels[lbl_index] = label;
+            ++lbl_index;
+        } else
+        {
+            str_lower(wrd);
+            int cmd = get_cmd_number(wrd);
+            CPU_command_t command = {};
+            CPU_command_ctor(&command, cmd, 0);
+            float param = 0;
+            switch (cmd)
             {
-                command.parameter = param;
-            } else
-            {
-                fscanf(stream, "%32s", wrd); // reads 'rax', there would be only 'rax' because all incorrect words we didn't pass in count_commands()
-                command.command = PUSH_RAX;
+            case PUSH:
+                if (fscanf(stream, "%f", &param) == 1)
+                {
+                    command.parameter = param;
+                } else
+                {
+                    fscanf(stream, "%" STR(MAX_LABELNAME) "s", wrd);
+                    command.command = PUSH_VAR;
+                    wrd[63] = '\0';
+                    str_lower(wrd);
+                    if (!strcmp(wrd, "rax"))
+                        command.parameter = RAX;
+                    else if (!strcmp(wrd, "rbx"))
+                        command.parameter = RBX;
+                    else if (!strcmp(wrd, "rcx"))
+                        command.parameter = RCX;
+                    else if (!strcmp(wrd, "rdx"))
+                        command.parameter = RDX;
+                }
+                break;
+            case POP:
+                if (fscanf(stream, "%f", &param) == 1)
+                {
+                    printf("Incorrect argument for pop command found: %g\n", param);
+                    rewind(stream);
+                    return -1;
+                } else
+                {
+                    fscanf(stream, "%" STR(MAX_LABELNAME) "s", wrd);
+                    wrd[MAX_LABELNAME - 1] = '\0';
+                    str_lower(wrd);
+                    if (!strcmp(wrd, "rax"))
+                        command.parameter = RAX;
+                    else if (!strcmp(wrd, "rbx"))
+                        command.parameter = RBX;
+                    else if (!strcmp(wrd, "rcx"))
+                        command.parameter = RCX;
+                    else if (!strcmp(wrd, "rdx"))
+                        command.parameter = RDX;
+                }
+                break;
+            case JA:
+            case JAE:
+            case JB:
+            case JBE:
+            case JE:
+            case JNE:
+            case JMP:
+            case CALL:
+                if (fscanf(stream, "%f", &param) == 1)
+                {
+                    command.parameter = param;
+                } else
+                {
+                    fscanf(stream, "%" STR(MAX_LABELNAME) "s", wrd);
+                    wrd[MAX_LABELNAME - 1] = '\0';
+                    lenwrd = strlen(wrd);
+                    if ((wrd[lenwrd - 1] == ':') || (cmd == CALL))
+                    {
+                        if (wrd[lenwrd - 1] == ':')
+                            wrd[lenwrd - 1] = '\0';
+                        int index = find_index_by_labelname(labels, labels_cnt, wrd);
+                        command.parameter = index;
+                        if ((index == -1) && warn_label)
+                        {
+                            printf("Unknown label found: %s\n", wrd);
+                            rewind(stream);
+                            return -1;
+                        }
+                    } else
+                    {
+                        printf("Incorrect argument found: %s\n", wrd);
+                        rewind(stream);
+                        return -1;
+                    }
+                }
+                break;
+            default:
+                break;
             }
-            break;
-        case POP:
-            if (fscanf(stream, "%d", &param) == 1)
-            {
-                printf("Incorrect argument for pop command found: %d\n", param);
-                rewind(stream);
-                return -1;
-            } else
-            {
-                fscanf(stream, "%32s", wrd); // reads 'rax'
-            }
-            break;
-        case JA:
-        case JMP:
-            if (fscanf(stream, "%d", &param) == 1)
-            {
-                command.parameter = param;
-            } else
-            {
-                fscanf(stream, "%32s", wrd); // reads 'rax'
-                printf("Incorrect argument for %s command found: %s\n", cmd == JA ? "ja" : "jmp", wrd);
-                rewind(stream);
-                return -1;
-            }
-            break;
-        default:
-            break;
+            commands[cmd_index] = command;
+            ++cmd_index;
         }
-        commands[cmd_index] = command;
-        ++cmd_index;
     }
+    rewind(stream);
     return 0;
 }
 
@@ -234,8 +389,22 @@ int get_cmd_number(char* str)
         return POP;
     else if (!strcmp(str, "ja"))
         return JA;
+    else if (!strcmp(str, "jae"))
+        return JAE;
+    else if (!strcmp(str, "jb"))
+        return JB;
+    else if (!strcmp(str, "jbe"))
+        return JBE;
+    else if (!strcmp(str, "je"))
+        return JE;
+    else if (!strcmp(str, "jne"))
+        return JNE;
     else if (!strcmp(str, "jmp"))
         return JMP;
+    else if (!strcmp(str, "call"))
+        return CALL;
+    else if (!strcmp(str, "ret"))
+        return RET;
     else if (!strcmp(str, "add"))
         return ADD;
     else if (!strcmp(str, "sub"))
@@ -246,10 +415,16 @@ int get_cmd_number(char* str)
         return DIV;
     else if (!strcmp(str, "pow"))
         return POW;
+    else if (!strcmp(str, "dup"))
+        return DUP;
+    else if (!strcmp(str, "in"))
+        return IN;
     else if (!strcmp(str, "out"))
         return OUT;
     else if (!strcmp(str, "end"))
         return END;
+    else if (!strcmp(str, "nop"))
+        return NOP;
     return -1;
 }
 
@@ -270,8 +445,18 @@ int write_assembled(const char* filename, const CPU_command_t* commands, int com
     {
         CPU_command_t cmd = commands[i];
         fprintf(stream, "%d ", cmd.command);
-        if ((cmd.command == PUSH) || (cmd.command == JA) || (cmd.command == JMP))
-            fprintf(stream, "%d ", cmd.parameter);
+        if ((cmd.command == PUSH) ||
+            (cmd.command == PUSH_VAR) ||
+            (cmd.command == POP) ||
+            (cmd.command == JA) ||
+            (cmd.command == JAE) ||
+            (cmd.command == JB) ||
+            (cmd.command == JBE) ||
+            (cmd.command == JE) ||
+            (cmd.command == JNE) ||
+            (cmd.command == JMP) ||
+            (cmd.command == CALL))
+            fprintf(stream, "%g ", cmd.parameter);
     }
     fprintf(stream, "\n");
 

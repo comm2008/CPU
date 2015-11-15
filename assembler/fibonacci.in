@@ -1,0 +1,35 @@
+push 2
+in
+sub
+pop rbx
+push 0
+pop rax
+push 1
+dup
+out
+pop rcx
+push 1
+pop rdx
+loop:
+push rbx
+push rax
+ja stop:
+call calculate_fib
+push 1
+push rax
+add
+pop rax
+jmp loop:
+stop:
+end
+
+calculate_fib:
+push rdx
+out
+push rdx
+push rcx
+push rdx
+add
+pop rdx
+pop rcx
+ret

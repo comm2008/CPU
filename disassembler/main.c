@@ -109,6 +109,17 @@ int disassemble_code(const char* inputfile, const char* outputfile)
     return 0;
 }
 
+#define WRITE_CMD_WITH_IARG(cmd) \
+if (fscanf(input, "%d", &param) == 1) \
+{ \
+    fprintf(output, cmd " %d\n", param); \
+    ++_params_count; \
+} else \
+{ \
+    printf("Incorrect argument for " cmd " command\n"); \
+    return -1; \
+}
+
 int write_disassembled(FILE* input, FILE* output)
 {
     assert(input);
@@ -128,9 +139,25 @@ int write_disassembled(FILE* input, FILE* output)
         switch (cmd)
         {
         case PUSH:
+            WRITE_CMD_WITH_IARG("push");
+            break;
+        case PUSH_VAR:
             if (fscanf(input, "%d", &param) == 1)
             {
-                fprintf(output, "push %d\n", param);
+                fprintf(output, "push ");
+                if (param == RAX)
+                    fprintf(output, "rax\n");
+                else if (param == RBX)
+                    fprintf(output, "rbx\n");
+                else if (param == RCX)
+                    fprintf(output, "rcx\n");
+                else if (param == RDX)
+                    fprintf(output, "rdx\n");
+                else
+                {
+                    printf("Incorrect argument for push command\n");
+                    return -1;
+                }
                 ++_params_count;
             } else
             {
@@ -138,33 +165,56 @@ int write_disassembled(FILE* input, FILE* output)
                 return -1;
             }
             break;
-        case PUSH_RAX:
-            fprintf(output, "push rax\n");
-            break;
         case POP:
-            fprintf(output, "pop rax\n");
+            if (fscanf(input, "%d", &param) == 1)
+            {
+                fprintf(output, "pop ");
+                if (param == RAX)
+                    fprintf(output, "rax\n");
+                else if (param == RBX)
+                    fprintf(output, "rbx\n");
+                else if (param == RCX)
+                    fprintf(output, "rcx\n");
+                else if (param == RDX)
+                    fprintf(output, "rdx\n");
+                else
+                {
+                    printf("Incorrect argument for pop command\n");
+                    return -1;
+                }
+                ++_params_count;
+            } else
+            {
+                printf("Incorrect argument for pop command\n");
+                return -1;
+            }
             break;
         case JA:
-            if (fscanf(input, "%d", &param) == 1)
-            {
-                fprintf(output, "ja %d\n", param);
-                ++_params_count;
-            } else
-            {
-                printf("Incorrect argument for JA command\n");
-                return -1;
-            }
+            WRITE_CMD_WITH_IARG("ja");
+            break;
+        case JAE:
+            WRITE_CMD_WITH_IARG("jae");
+            break;
+        case JB:
+            WRITE_CMD_WITH_IARG("jb");
+            break;
+        case JBE:
+            WRITE_CMD_WITH_IARG("jbe");
+            break;
+        case JE:
+            WRITE_CMD_WITH_IARG("je");
+            break;
+        case JNE:
+            WRITE_CMD_WITH_IARG("jne");
             break;
         case JMP:
-            if (fscanf(input, "%d", &param) == 1)
-            {
-                fprintf(output, "jmp %d\n", param);
-                ++_params_count;
-            } else
-            {
-                printf("Incorrect argument for JMP command\n");
-                return -1;
-            }
+            WRITE_CMD_WITH_IARG("jmp");
+            break;
+        case CALL:
+            WRITE_CMD_WITH_IARG("call");
+            break;
+        case RET:
+            fprintf(output, "ret\n");
             break;
         case ADD:
             fprintf(output, "add\n");
@@ -181,8 +231,17 @@ int write_disassembled(FILE* input, FILE* output)
         case POW:
             fprintf(output, "pow\n");
             break;
+        case DUP:
+            fprintf(output, "dup\n");
+            break;
+        case IN:
+            fprintf(output, "in\n");
+            break;
         case OUT:
             fprintf(output, "out\n");
+            break;
+        case NOP:
+            fprintf(output, "nop\n");
             break;
         case END:
             fprintf(output, "end\n");

@@ -11,7 +11,7 @@ int Stack_ctor(Stack_t* This, int size)
 
     This->size = size;
     This->count = 0;
-    This->data = (int*) calloc(size, sizeof(*This->data));
+    This->data = (float*) calloc(size, sizeof(*This->data));
 
     ASSERT_OK(Stack, This);
 
@@ -20,7 +20,7 @@ int Stack_ctor(Stack_t* This, int size)
 
 int Stack_dtor(Stack_t* This)
 {
-    ASSERT_OK(Stack, This);
+    assert(This);
 
     This->size = 0;
     This->count = -1;
@@ -58,7 +58,7 @@ int Stack_dump(Stack_t* This, char* name)
            name, Stack_ok(This) ? "ok" : "NOT OK!!!", This->size, This->count);
     if (This->data)
         for (int i = 0; i < This->size; ++i)
-            printf("        [%d]%s%d\n", i, i < This->count ? " " : " * ", This->data[i]);
+            printf("        [%d]%s%g\n", i, i < This->count ? " " : " * ", This->data[i]);
     else
         printf("        NULL pointer here :(\n");
     printf("    }\n"
@@ -67,7 +67,7 @@ int Stack_dump(Stack_t* This, char* name)
     return 0;
 }
 
-int Stack_push(Stack_t* This, int value)
+int Stack_push(Stack_t* This, float value)
 {
     ASSERT_OK(Stack, This);
 
@@ -78,11 +78,11 @@ int Stack_push(Stack_t* This, int value)
     return 0;
 }
 
-int Stack_pop(Stack_t* This)
+float Stack_pop(Stack_t* This)
 {
     ASSERT_OK(Stack, This);
 
-    int value = 0;
+    float value = 0;
     if (This->count > 0)
         value = This->data[This->count - 1];
     //This->data[This->count - 1] = 0;

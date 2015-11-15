@@ -1,23 +1,64 @@
 #include <stdio.h>
+#include <assert.h>
 #include <stdlib.h>
 #include "processor.h"
 #include "commands.h"
 
-#define FILENAME_READ "../assembler/program.out"
+#define DEFAULT_INPUT "../assembler/code.out"
 
 #define MY_NAME "GavYur"
 #define GREET(program, version) printf("#--- " program " v" version " (%s %s) by " MY_NAME "\n\n", __DATE__, __TIME__)
 
+int print_help();
+int print_version();
+int parse_file(const char* filename);
 int fill_commands(FILE* stream, CPU_command_t* commands, int commands_cnt, int params_cnt);
 
-int main()
+int main(int argc, char* argv[])
+{
+    if (argc == 1)
+    {
+        return parse_file(DEFAULT_INPUT);
+    } else if (argc == 2)
+    {
+        if (!strcmp(argv[1], "--help") || !strcmp(argv[1], "-h"))
+            return print_help();
+        else if (!strcmp(argv[1], "--version") || !strcmp(argv[1], "-v"))
+            return print_version();
+        else
+            return parse_file(argv[1]);
+    } else
+        return print_help();
+}
+int print_help()
+{
+    GREET("Processor", "0.1");
+    printf("\nusage: processor [options] [input_file]\n\n"
+           "Options:\n"
+           "  -h, --help\t\tprints this message\n"
+           "  -v, --version\t\tprints version of this program\n\n"
+           "If no input file specified, program will use \"%s\" as input file.\n",
+           DEFAULT_INPUT);
+
+    return 0;
+}
+
+int print_version()
 {
     GREET("Processor", "0.1");
 
-    FILE* stream = fopen(FILENAME_READ, "rb");
+    return 0;
+}
+
+int parse_file(const char* filename)
+{
+    GREET("Processor", "0.1");
+
+    FILE* stream = fopen(filename, "rb");
     if (!stream)
     {
-        perror("Error opening file");
+        printf("Error opening file ");
+        perror(filename);
         return 1;
     }
 
@@ -36,7 +77,6 @@ int main()
             printf("Program file corrupt\n");
         return 2;
     }
-
 
     CPU_t processor = {};
     CPU_ctor(&processor);
@@ -64,29 +104,27 @@ int fill_commands(FILE* stream, CPU_command_t* commands, int commands_cnt, int p
     {
         CPU_command_t command = {};
         CPU_command_ctor(&command, cmd, 0);
-        int param = 0;
+        float param = 0;
         switch (cmd)
         {
         case PUSH:
-            if (fscanf(stream, "%d", &param) == 1)
-            {
-                command.parameter = param;
-                ++_params_cnt;
-            } else
-            {
-                printf("Incorrect argument for push command\n");
-                return -1;
-            }
-            break;
+        case PUSH_VAR:
+        case POP:
         case JA:
+        case JAE:
+        case JB:
+        case JBE:
+        case JE:
+        case JNE:
         case JMP:
-            if (fscanf(stream, "%d", &param) == 1)
+        case CALL:
+            if (fscanf(stream, "%f", &param) == 1)
             {
                 command.parameter = param;
                 ++_params_cnt;
             } else
             {
-                printf("Incorrect argument for %s command\n", cmd == JA ? "ja" : "jmp");
+                printf("Incorrect argument\n");
                 return -1;
             }
             break;

@@ -2,7 +2,7 @@
 #include "myassert.h"
 #include "commands.h"
 
-int CPU_command_ctor(CPU_command_t* This, int command, int param)
+int CPU_command_ctor(CPU_command_t* This, int command, float param)
 {
     assert(This);
 
@@ -28,7 +28,7 @@ int CPU_command_ok(CPU_command_t* This)
 {
     if (!This)
         return 0;
-    if ((This->command < PUSH) || (This->command > END))
+    if ((This->command < END) || (This->command > NOP))
         return 0;
 
     return 1;
@@ -41,7 +41,7 @@ int CPU_command_dump(CPU_command_t* This, char* name)
     printf("%s = CPU_command_t(%s)\n"
            "{\n"
            "    command = %d\n"
-           "    parameter = %d\n"
+           "    parameter = %g\n"
            "}\n",
            name, CPU_command_ok(This) ? "ok" : "NOT OK!!!", This->command, This->parameter);
 
